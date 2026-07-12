@@ -1,0 +1,31 @@
+name: Deploy to Val Town
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: val-town-sync
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[vt-sync]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: denoland/setup-deno@v2
+      - name: Install vt
+        run: deno install -gArf jsr:@valtown/vt@0.1.56
+      - name: Require Val Town API key
+        env:
+          VAL_TOWN_API_KEY: ${{ secrets.VAL_TOWN_API_KEY }}
+        run: test -n "$VAL_TOWN_API_KEY" || (echo "Add the VAL_TOWN_API_KEY repository secret" && exit 1)
+      - name: Deploy
+        env:
+          VAL_TOWN_API_KEY: ${{ secrets.VAL_TOWN_API_KEY }}
+        run: vt push

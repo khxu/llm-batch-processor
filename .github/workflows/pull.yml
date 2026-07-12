@@ -1,0 +1,42 @@
+name: Capture Val Town edits
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 */6 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: val-town-sync
+  cancel-in-progress: false
+
+jobs:
+  pull:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: denoland/setup-deno@v2
+      - name: Install vt
+        run: deno install -gArf jsr:@valtown/vt@0.1.56
+      - name: Require Val Town API key
+        env:
+          VAL_TOWN_API_KEY: ${{ secrets.VAL_TOWN_API_KEY }}
+        run: test -n "$VAL_TOWN_API_KEY" || (echo "Add the VAL_TOWN_API_KEY repository secret" && exit 1)
+      - name: Pull from Val Town
+        env:
+          VAL_TOWN_API_KEY: ${{ secrets.VAL_TOWN_API_KEY }}
+        run: vt pull -f
+      - name: Commit Val Town changes
+        run: |
+          git checkout -- .vt/state.json
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Val matches repo; nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "[vt-sync] Pull changes from Val Town"
+          git push

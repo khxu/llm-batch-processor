@@ -1,8 +1,11 @@
 /** @jsxImportSource https://esm.sh/react@18.2.0 */
 import {
+  type ChangeEvent,
+  type DragEvent,
   type FormEvent,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "https://esm.sh/react@18.2.0";
 
@@ -65,8 +68,12 @@ export function App() {
   const [name, setName] = useState("");
   const [endpoint, setEndpoint] = useState("/v1/responses");
   const [jsonl, setJsonl] = useState(sample);
+  const [fileNames, setFileNames] = useState<string[]>([]);
+  const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const fileInput = useRef<HTMLInputElement>(null);
+  const dragDepth = useRef(0);
 
   const activeCount = useMemo(
     () => jobs.filter((job) => !terminal.has(job.state)).length,
@@ -86,6 +93,44 @@ export function App() {
     const timer = setInterval(load, 30_000);
     return () => clearInterval(timer);
   }, []);
+
+  async function loadFiles(files: File[]) {
+    if (files.length === 0) return;
+
+    setMessage("");
+    try {
+      const contents = await Promise.all(files.map((file) => file.text()));
+      const combined = contents.reduce((result, content) => {
+        if (result && !result.endsWith("\n") && !content.startsWith("\n")) {
+          return `${result}\n${content}`;
+        }
+        return result + content;
+      }, "");
+      setJsonl(combined);
+      setFileNames(files.map((file) => file.name));
+      if (!name && files.length === 1) {
+        setName(files[0].name.replace(/\.(jsonl|ndjson)$/i, ""));
+      }
+    } catch (error) {
+      setMessage(
+        `Could not read the selected files: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
+  function selectFiles(event: ChangeEvent<HTMLInputElement>) {
+    void loadFiles(Array.from(event.currentTarget.files ?? []));
+    event.currentTarget.value = "";
+  }
+
+  function dropFiles(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    dragDepth.current = 0;
+    setDragging(false);
+    void loadFiles(Array.from(event.dataTransfer.files));
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -159,16 +204,69 @@ export function App() {
                 className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-sm outline-none focus:border-blue-500"
               />
             </label>
-            <label className="block text-sm text-slate-300">
-              Batch JSONL
+            <div className="text-sm text-slate-300">
+              <span>Batch JSONL</span>
+              <div
+                onDragEnter={(event) => {
+                  event.preventDefault();
+                  dragDepth.current += 1;
+                  setDragging(true);
+                }}
+                onDragOver={(event) => event.preventDefault()}
+                onDragLeave={() => {
+                  dragDepth.current = Math.max(0, dragDepth.current - 1);
+                  if (dragDepth.current === 0) {
+                    setDragging(false);
+                  }
+                }}
+                onDrop={dropFiles}
+                className={`mt-1 rounded-lg border-2 border-dashed p-4 text-center transition ${
+                  dragging
+                    ? "border-blue-400 bg-blue-950/40"
+                    : "border-slate-700 bg-slate-950"
+                }`}
+              >
+                <input
+                  ref={fileInput}
+                  type="file"
+                  accept=".jsonl,.ndjson,application/jsonl,application/x-ndjson"
+                  multiple
+                  onChange={selectFiles}
+                  className="hidden"
+                />
+                <p className="text-sm text-slate-300">
+                  Drop one or more JSONL files here
+                </p>
+                <button
+                  type="button"
+                  onClick={() => fileInput.current?.click()}
+                  className="mt-2 rounded-lg border border-slate-600 px-3 py-1.5 text-sm hover:bg-slate-800"
+                >
+                  Choose files
+                </button>
+                <p className="mt-2 text-xs text-slate-500">
+                  Multiple files are combined in selection order.
+                </p>
+              </div>
+              {fileNames.length > 0 && (
+                <p className="mt-2 break-words text-xs text-slate-400">
+                  Loaded {fileNames.length} file{fileNames.length === 1 ? "" : "s"}:
+                  {" "}
+                  {fileNames.join(", ")}
+                </p>
+              )}
               <textarea
                 value={jsonl}
-                onChange={(e) => setJsonl(e.currentTarget.value)}
+                onChange={(e) => {
+                  setJsonl(e.currentTarget.value);
+                  setFileNames([]);
+                }}
                 rows={13}
                 spellCheck={false}
-                className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs leading-5 outline-none focus:border-blue-500"
+                aria-label="Batch JSONL content"
+                className="mt-3 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs leading-5 outline-none focus:border-blue-500"
               />
-            </label>
+            </div>
             <button
               disabled={busy}
               className="w-full rounded-lg bg-blue-600 px-4 py-2.5 font-medium hover:bg-blue-500 disabled:opacity-50"

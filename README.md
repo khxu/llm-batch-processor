@@ -11,7 +11,8 @@ progress, cancelling jobs, and downloading output/error files.
 1. Create an OpenAI API key at https://platform.openai.com/api-keys.
 2. Add it to the val as `OPENAI_API_KEY`.
 3. Log in with Val Town at the HTTP endpoint. Access is restricted to `khxu`.
-4. Paste a valid OpenAI Batch JSONL file and queue it.
+4. Paste JSONL, or drag and drop/select one or more JSONL files, then queue the
+   batch. Multiple files are combined in selection order.
 
 Add the OpenAI key here:
 
